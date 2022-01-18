@@ -285,6 +285,7 @@ class SearchStrategy(object):
             min_iteration_per_job=None,  # type: Optional[int]
             max_iteration_per_job=None,  # type: Optional[int]
             total_max_jobs=None,  # type: Optional[int]
+            total_max_iterations=None,  # type: Optional[int]
             **_  # type: Any
     ):
         # type: (...) -> ()
@@ -306,6 +307,8 @@ class SearchStrategy(object):
             When maximum iterations is exceeded, the job is aborted.  (Optional)
         :param int total_max_jobs: The total maximum jobs for the optimization process. The default value is ``None``,
             for unlimited.
+        :param int total_max_iterations: The total maximum iterations for the optimization process. The default value
+            is ``None`` for unlimited.
         """
         super(SearchStrategy, self).__init__()
         self._base_task_id = base_task_id
@@ -319,6 +322,7 @@ class SearchStrategy(object):
         self.max_iteration_per_job = max_iteration_per_job
         self.min_iteration_per_job = min_iteration_per_job
         self.total_max_jobs = total_max_jobs
+        self.total_max_iterations = total_max_iterations
         self._stop_event = Event()
         self._current_jobs = []
         self._pending_jobs = []
@@ -331,8 +335,7 @@ class SearchStrategy(object):
         self.budget = Budget(
             jobs_limit=self.total_max_jobs,
             compute_time_limit=self.compute_time_limit if self.compute_time_limit else None,
-            iterations_limit=self.total_max_jobs * self.max_iteration_per_job if
-            self.max_iteration_per_job and self.total_max_jobs else None
+            iterations_limit=self.total_max_iterations if self.total_max_iterations else None
         )
         self._validate_base_task()
         self._optimizer_task = None
@@ -936,6 +939,7 @@ class GridSearch(SearchStrategy):
             compute_time_limit=None,  # type: Optional[float]
             max_iteration_per_job=None,  # type: Optional[int]
             total_max_jobs=None,  # type: Optional[int]
+            total_max_iterations=None,  # type: Optional[int]
             **_  # type: Any
     ):
         # type: (...) -> ()
@@ -956,13 +960,15 @@ class GridSearch(SearchStrategy):
             per single job, When exceeded, the job is aborted.
         :param int total_max_jobs: The total maximum jobs for the optimization process. The default is ``None``, for
             unlimited.
+        :param int total_max_iterations: total maximum iterations for the optimization process. The default is ``None``,
+            for unlimited
         """
         super(GridSearch, self).__init__(
             base_task_id=base_task_id, hyper_parameters=hyper_parameters, objective_metric=objective_metric,
             execution_queue=execution_queue, num_concurrent_workers=num_concurrent_workers,
             pool_period_min=pool_period_min, time_limit_per_job=time_limit_per_job,
             compute_time_limit=compute_time_limit, max_iteration_per_job=max_iteration_per_job,
-            total_max_jobs=total_max_jobs, **_)
+            total_max_jobs=total_max_jobs, total_max_iterations=total_max_iterations, **_)
         self._param_iterator = None
 
     def create_job(self):
@@ -1011,6 +1017,7 @@ class RandomSearch(SearchStrategy):
             compute_time_limit=None,  # type: Optional[float]
             max_iteration_per_job=None,  # type: Optional[int]
             total_max_jobs=None,  # type: Optional[int]
+            total_max_iterations=None,  # type: Optional[int]
             **_  # type: Any
     ):
         # type: (...) -> ()
@@ -1031,13 +1038,15 @@ class RandomSearch(SearchStrategy):
             per single job. When exceeded, the job is aborted.
         :param int total_max_jobs: The total maximum jobs for the optimization process. The default is ``None``, for
             unlimited.
+        :param int total_max_iterations: total maximum iterations for the optimization process. The default is ``None``,
+            for unlimited
         """
         super(RandomSearch, self).__init__(
             base_task_id=base_task_id, hyper_parameters=hyper_parameters, objective_metric=objective_metric,
             execution_queue=execution_queue, num_concurrent_workers=num_concurrent_workers,
             pool_period_min=pool_period_min, time_limit_per_job=time_limit_per_job,
             compute_time_limit=compute_time_limit, max_iteration_per_job=max_iteration_per_job,
-            total_max_jobs=total_max_jobs, **_)
+            total_max_jobs=total_max_jobs, total_max_iterations=total_max_iterations, **_)
         self._hyper_parameters_collection = set()
 
     def create_job(self):

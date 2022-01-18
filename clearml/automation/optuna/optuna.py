@@ -102,6 +102,7 @@ class OptimizerOptuna(SearchStrategy):
             optuna_sampler=None,  # type: Optional[optuna.samplers.base]
             optuna_pruner=None,  # type: Optional[optuna.pruners.base]
             continue_previous_study=None,  # type: Optional[optuna.Study]
+            total_max_iterations=None,  # type: Optional[int]
             **optuna_kwargs  # type: Any
     ):
         # type: (...) -> None
@@ -118,19 +119,17 @@ class OptimizerOptuna(SearchStrategy):
         :param int max_iteration_per_job: number of iteration per job
             'iterations' are the reported iterations for the specified objective,
             not the maximum reported iteration of the Task.
-        :param int total_max_jobs: total maximum job for the optimization process.
-            Must be provided in order to calculate the total budget for the optimization process.
-            The total budget is measured by "iterations" (see above)
-            and will be set to `max_iteration_per_job * total_max_jobs`
-            This means more than total_max_jobs could be created, as long as the cumulative iterations
-            (summed over all created jobs) will not exceed `max_iteration_per_job * total_max_jobs`
+        :param int total_max_jobs: total maximum job for the optimization process. Set this parameter to use the total
+            amount of jobs as a budget.
         :param float pool_period_min: time in minutes between two consecutive pools
         :param int min_iteration_per_job: The minimum number of iterations (of the Objective metric) per single job,
             before early stopping the Job. (Optional)
         :param float time_limit_per_job: Optional, maximum execution time per single job in minutes,
             when time limit is exceeded job is aborted
-        :param float compute_time_limit: The maximum compute time in minutes. When time limit is exceeded,
-            all jobs aborted. (Optional)
+        :param float compute_time_limit: The maximum compute time in minutes. Set this parameter to use time as a budget
+            When time limit is exceeded, all jobs aborted. (Optional)
+        :param int total_max_iterations: total maximum iterations for the optimization process. Set this parameter to
+            use the total amount of iterations as a budget.
         :param optuna_kwargs: arguments passed directly to the Optuna object
         """
         super(OptimizerOptuna, self).__init__(
@@ -138,7 +137,8 @@ class OptimizerOptuna(SearchStrategy):
             execution_queue=execution_queue, num_concurrent_workers=num_concurrent_workers,
             pool_period_min=pool_period_min, time_limit_per_job=time_limit_per_job,
             compute_time_limit=compute_time_limit, max_iteration_per_job=max_iteration_per_job,
-            min_iteration_per_job=min_iteration_per_job, total_max_jobs=total_max_jobs)
+            min_iteration_per_job=min_iteration_per_job, total_max_jobs=total_max_jobs,
+            total_max_iterations=total_max_iterations)
         self._optuna_sampler = optuna_sampler
         self._optuna_pruner = optuna_pruner
         verified_optuna_kwargs = []

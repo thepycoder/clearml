@@ -125,6 +125,7 @@ class OptimizerBOHB(SearchStrategy, RandomSeed):
             time_limit_per_job=None,  # type: Optional[float]
             compute_time_limit=None,  # type: Optional[float]
             local_port=9090,  # type: int
+            total_max_iterations=None,  # type: Optional[int]
             **bohb_kwargs  # type: Any
     ):
         # type: (...) -> None
@@ -157,17 +158,15 @@ class OptimizerBOHB(SearchStrategy, RandomSeed):
         :param int max_iteration_per_job: number of iteration per job
             'iterations' are the reported iterations for the specified objective,
             not the maximum reported iteration of the Task.
-        :param int total_max_jobs: total maximum job for the optimization process.
-            Must be provided in order to calculate the total budget for the optimization process.
-            The total budget is measured by "iterations" (see above)
-            and will be set to `max_iteration_per_job * total_max_jobs`
-            This means more than total_max_jobs could be created, as long as the cumulative iterations
-            (summed over all created jobs) will not exceed `max_iteration_per_job * total_max_jobs`
+        :param int total_max_jobs: total maximum job for the optimization process. Set this parameter to use the total
+            amount of jobs as a budget.
         :param float pool_period_min: time in minutes between two consecutive pools
         :param float time_limit_per_job: Optional, maximum execution time per single job in minutes,
             when time limit is exceeded job is aborted
-        :param float compute_time_limit: The maximum compute time in minutes. When time limit is exceeded,
-            all jobs aborted. (Optional)
+        :param float compute_time_limit: The maximum compute time in minutes. Set this parameter to use time as a budget
+            When time limit is exceeded, all jobs aborted. (Optional)
+        :param int total_max_iterations: total maximum iterations for the optimization process. Set this parameter to
+            use the total amount of iterations as a budget.
         :param int local_port: default port 9090 tcp, this is a must for the BOHB workers to communicate, even locally.
         :param bohb_kwargs: arguments passed directly to the BOHB object
         """
@@ -184,7 +183,8 @@ class OptimizerBOHB(SearchStrategy, RandomSeed):
             execution_queue=execution_queue, num_concurrent_workers=num_concurrent_workers,
             pool_period_min=pool_period_min, time_limit_per_job=time_limit_per_job,
             compute_time_limit=compute_time_limit, max_iteration_per_job=max_iteration_per_job,
-            min_iteration_per_job=min_iteration_per_job, total_max_jobs=total_max_jobs)
+            min_iteration_per_job=min_iteration_per_job, total_max_jobs=total_max_jobs,
+            total_max_iterations=total_max_iterations)
         self._max_iteration_per_job = max_iteration_per_job
         self._min_iteration_per_job = min_iteration_per_job
         verified_bohb_kwargs = ['eta', 'min_budget', 'max_budget', 'min_points_in_model', 'top_n_percent',
