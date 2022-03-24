@@ -92,6 +92,14 @@ class Dataset(object):
                     task.set_system_tags(task_system_tags + [self.__tag])
                 if dataset_tags:
                     task.set_tags((task.get_tags() or []) + list(dataset_tags))
+
+            # Keep track of modified files, we use a space because these keys are used in the UI.
+            # So no ugly underscores etc. We also load the metadata from the existing task into
+            # this one so we can add when e.g. add_files is called multiple times
+            task_state_metadata = task.artifacts.get('state').metadata
+            self.modified_files = {'files added': task_state_metadata.get('files added', 0),
+                                   'files removed': task_state_metadata.get('files removed', 0),
+                                   'files modified': task_state_metadata.get('files modified', 0)}
         else:
             self._created_task = True
             task = Task.create(
@@ -121,6 +129,8 @@ class Dataset(object):
             # set the newly created Dataset parent ot the current Task, so we know who created it.
             if Task.current_task() and Task.current_task().id != task.id:
                 task.set_parent(Task.current_task())
+            # Set the modified files to empty on dataset creation
+            self.modified_files = {'files added': 0, 'files removed': 0, 'files modified': 0}
 
         # store current dataset Task
         self._task = task
@@ -206,7 +216,7 @@ class Dataset(object):
                      dataset_path=dataset_path, recursive=recursive, verbose=verbose)),
             print_console=False)
 
-        num_added = self._add_files(
+        num_added, num_modified = self._add_files(
             path=path, wildcard=wildcard, local_base_folder=local_base_folder,
             dataset_path=dataset_path, recursive=recursive, verbose=verbose)
 
@@ -215,7 +225,7 @@ class Dataset(object):
             'add_files', path=path, wildcard=wildcard, local_base_folder=local_base_folder,
             dataset_path=dataset_path, recursive=recursive)
 
-        self._serialize()
+        self._serialize(num_files_added=num_added, num_files_modified=num_modified)
 
         return num_added
 
@@ -262,9 +272,11 @@ class Dataset(object):
         self._add_script_call(
             'remove_files', dataset_path=dataset_path, recursive=recursive)
 
-        self._serialize()
+        num_removed = num_files - len(self._dataset_file_entries)
 
-        return num_files - len(self._dataset_file_entries)
+        self._serialize(num_files_removed=num_removed)
+
+        return num_removed
 
     def sync_folder(self, local_path, dataset_path=None, verbose=False):
         # type: (Union[Path, _Path, str], Union[Path, _Path, str], bool) -> (int, int)
@@ -302,19 +314,22 @@ class Dataset(object):
         removed_files = num_files - len(self._dataset_file_entries)
 
         # add remaining files
-        added_files = self._add_files(path=local_path, dataset_path=dataset_path, recursive=True, verbose=verbose)
+        num_added, num_modified = self._add_files(path=local_path, dataset_path=dataset_path,
+                                                  recursive=True, verbose=verbose)
+
+        # How many of the files were modified? AKA have the same name but a different hash
 
         if verbose:
             self._task.get_logger().report_text(
                 'Syncing folder {} : {} files removed, {} added / modified'.format(
-                    local_path.as_posix(), removed_files, added_files))
+                    local_path.as_posix(), removed_files, num_added + num_modified))
 
         # update the task script
         self._add_script_call(
             'sync_folder', local_path=local_path, dataset_path=dataset_path)
 
-        self._serialize()
-        return removed_files, added_files
+        self._serialize(num_files_removed=removed_files, num_files_added=num_added, num_files_modified=num_modified)
+        return removed_files, num_added, num_modified
 
     def upload(self, show_progress=True, verbose=False, output_url=None, compression=None, chunk_size=None):
         # type: (bool, bool, Optional[str], Optional[str], int) -> ()
@@ -497,7 +512,10 @@ class Dataset(object):
         self._add_script_call('finalize')
         if verbose:
             print('Updating statistics and genealogy')
+        import time
+        start = time.time()
         self._report_dataset_genealogy()
+        print(f'Lineage took {time.time() - start} seconds')
         hashed_nodes = [self._get_dataset_id_hash(k) for k in self._dependency_graph.keys()]
         self._task.comment = 'Dependencies: {}\n'.format(hashed_nodes)
         if self._using_current_task:
@@ -1162,6 +1180,11 @@ class Dataset(object):
             pool.close()
             self._task.get_logger().report_text('Hash generation completed')
 
+        # Get modified files
+        filename_hash_dict = {fe.relative_path:fe.hash for fe in file_entries}
+        modified_count = len([k for k, v in self._dataset_file_entries.items()
+                              if k in filename_hash_dict and v.hash != filename_hash_dict[k]])
+
         # merge back into the dataset
         count = 0
         for f in file_entries:
@@ -1192,7 +1215,8 @@ class Dataset(object):
                 if verbose:
                     self._task.get_logger().report_text('Unchanged {}'.format(f.relative_path))
 
-        return count
+        # We don't count the modified files as added files
+        return count - modified_count, modified_count
 
     def _update_dependency_graph(self):
         """
@@ -1211,8 +1235,9 @@ class Dataset(object):
         # make sure we do not remove our parents, for geology sake
         self._dependency_graph[self._id] = current_parents
 
-    def _serialize(self, update_dependency_chunk_lookup=False):
-        # type: (bool) -> ()
+    def _serialize(self, update_dependency_chunk_lookup=False,
+                   num_files_added=0, num_files_removed=0, num_files_modified=0):
+        # type: (bool, int, int) -> ()
         """
         store current state of the Dataset for later use
 
@@ -1238,9 +1263,19 @@ class Dataset(object):
             'Current dependency graph: {2}\n'.format(
                 len(modified_files), format_size(sum(modified_files)),
                 json.dumps(self._dependency_graph, indent=2, sort_keys=True))
-        # store as artifact of the Task.
+        # Create the metadata dictionary based on which arguments are supplied
+        if num_files_added:
+            self.modified_files['files added'] += num_files_added
+        if num_files_removed:
+            self.modified_files['files removed'] += num_files_removed
+        if num_files_modified:
+            self.modified_files['files modified'] += num_files_modified
+        # store as artifact of the Task and add the amount of files added or removed as metadata, so we can use those
+        # later to create the table
         self._task.upload_artifact(
-            name=self.__state_entry_name, artifact_object=state, preview=preview, wait_on_upload=True)
+            name=self.__state_entry_name, artifact_object=state, preview=preview, wait_on_upload=True,
+            metadata=self.modified_files
+        )
 
     def _download_dataset_archives(self):
         """
@@ -1616,11 +1651,16 @@ class Dataset(object):
                 if f.parent_dataset_id == node:
                     count += 1
                     size += f.size
-            removed = len(self.list_removed_files(node))
-            modified = len(self.list_modified_files(node))
+            # State is of type clearml.binding.artifacts.Artifact
+            node_task = Task.get_task(task_id=node)
+            node_state_metadata = node_task.artifacts.get('state').metadata
+            removed = int(node_state_metadata.get('files removed', 0))
+            added = int(node_state_metadata.get('files added', 0))
+            modified = int(node_state_metadata.get('files modified', 0))
+
             table_values += [[node, node_names.get(node, ''),
-                              removed, modified, max(0, count-modified), format_size(size)]]
-            node_details[node] = [removed, modified, max(0, count-modified), format_size(size)]
+                              removed, modified, added, format_size(size)]]
+            node_details[node] = [removed, modified, added, format_size(size)]
 
         # create DAG
         visited = []
