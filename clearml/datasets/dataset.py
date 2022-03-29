@@ -1654,9 +1654,17 @@ class Dataset(object):
             # State is of type clearml.binding.artifacts.Artifact
             node_task = Task.get_task(task_id=node)
             node_state_metadata = node_task.artifacts.get('state').metadata
-            removed = int(node_state_metadata.get('files removed', 0))
-            added = int(node_state_metadata.get('files added', 0))
-            modified = int(node_state_metadata.get('files modified', 0))
+            # Backwards compatibility, if the task was made before the new table change, just use the old system
+            if not node_state_metadata:
+                node_dataset = Dataset.get(dataset_id=node)
+                removed = len(node_dataset.list_removed_files())
+                added = len(node_dataset.list_added_files())
+                modified = len(node_dataset.list_modified_files())
+            else:
+                # TODO: if new system is prevalent, get rid of old system
+                removed = int(node_state_metadata.get('files removed', 0))
+                added = int(node_state_metadata.get('files added', 0))
+                modified = int(node_state_metadata.get('files modified', 0))
 
             table_values += [[node, node_names.get(node, ''),
                               removed, modified, added, format_size(size)]]
