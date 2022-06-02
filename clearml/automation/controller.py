@@ -2269,6 +2269,7 @@ class PipelineController(object):
         """
         parts = step_ref_string[2:-1].split('.')
         v = step_ref_string
+        print(f"I'm here and parts is {parts} and v is {v} pipeline step ref is: {self._pipeline_step_ref}")
         if len(parts) < 2:
             raise ValueError("Node '{}', parameter '{}' is invalid".format(node.name, v))
         prev_step = parts[0]
@@ -2277,6 +2278,7 @@ class PipelineController(object):
         # check if we reference the pipeline arguments themselves
         if prev_step == self._pipeline_step_ref:
             if input_type not in self._pipeline_args:
+                print(f"I'm here and prev step is {prev_step} and pipeline step ref is: {self._pipeline_step_ref}")
                 raise ValueError("Node '{}', parameter '{}', step name '{}' is invalid".format(node.name, v, prev_step))
             return None
 
